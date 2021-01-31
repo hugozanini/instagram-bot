@@ -9,6 +9,7 @@ import time
 import logging
 from tqdm import tqdm
 import pandas as pd
+import argparse
 
 
 logger = logging.getLogger('InstaBOT')
@@ -17,7 +18,8 @@ logger.setLevel(logging.DEBUG)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
 ch.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = \
+    logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 
 # add ch to logger
@@ -110,9 +112,11 @@ class InstaBot():
         '''
         Getting posts links
         '''
-        saved_links = set()
+        saved_links = {}
+        rank = 0
         # Get scroll height
-        last_height = self.__driver.execute_script("return document.body.scrollHeight")
+        last_height = \
+            self.__driver.execute_script("return document.body.scrollHeight")
 
         for j in tqdm(range(nscrolls)):
             self.__driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -122,13 +126,16 @@ class InstaBot():
 
             for i in range(len(valid_links)):
                 link = valid_links[i].get_attribute('href')
-                saved_links.add(link)
+                if link not in saved_links.keys():
+                    saved_links[link] = rank
+                    rank += 1
 
             # Wait to load page
             time.sleep(scroll_pause_time)
 
             # Calculate new scroll height and compare with last scroll height
-            new_height = self.__driver.execute_script("return document.body.scrollHeight")
+            new_height = \
+                self.__driver.execute_script("return document.body.scrollHeight")
 
             if new_height == last_height:
                 # If heights are the same it will exit the function
@@ -162,7 +169,7 @@ class InstaBot():
                 return post_infos[1]
             else:
                 #video
-                logger.warning("Video doesn't contains description")
+                logger.warning("Description is not available")
                 return ''
         else:
             return ''
@@ -177,6 +184,16 @@ class InstaBot():
         likes = likes.get_attribute('innerHTML')
         return likes
 
+    def __get_views(self):
+        '''
+        Getting views
+        '''
+        views_xpath = '/html/body/div[1]/section/main/div/div[1]\
+            /article/div[3]/section[2]/div/span/span'
+        views = self.__driver.find_element_by_xpath(views_xpath)
+        views = views.get_attribute('innerHTML')
+        return views
+
     def __get_date(self):
         '''
         Getting date
@@ -187,6 +204,45 @@ class InstaBot():
         date = date.get_attribute('datetime')
         return date
 
+    def __get_image_data(self, link, rank):
+        '''
+        Get image data
+        '''
+        infos = {}
+        infos['date'] = self.__get_date()
+        infos['type'] = 'image'
+        if len(infos['date']) == 0:
+            return None
+        infos['user'] = self.__get_user()
+        infos['subtitles'] = self.__get_subtitles()
+        infos['image_description'] = self.__get_image_description()
+        infos['likes'] = self.__get_likes()
+        infos['views'] = None
+        infos['rank'] = rank
+        infos['link'] = link
+
+        return infos
+
+
+    def __get_video_data(self, link, rank):
+        '''
+        Get video data
+        '''
+        infos = {}
+        infos['date'] = self.__get_date()
+        infos['type'] = 'video'
+        if len(infos['date']) == 0:
+            return None
+        infos['user'] = self.__get_user()
+        infos['subtitles'] = self.__get_subtitles()
+        infos['views'] = self.__get_views()
+        infos['likes'] = None
+        infos['rank'] = rank
+        infos['link'] = link
+
+        return infos
+
+
 
     def get_data(self, nscrolls, scroll_pause_time) -> dict:
         '''
@@ -196,50 +252,70 @@ class InstaBot():
         logger.info(str(len(links)) + " links were found.")
 
         processed_data = []
-        for link in tqdm(links):
+        for link, rank in tqdm(links.items()):
             infos = {}
 
             #Accessing the post
             self.__driver.get(link)
-            post_details = self.__driver.find_element_by_xpath('/html/body/script[1]')
+            time.sleep(1)
+            post_details = \
+                    self.__driver.find_element_by_xpath('/html/body/script[1]')
             post_details = post_details.get_attribute('innerHTML')
 
-            #Skiping the videos
-            if post_details.split('is_video":')[1][:1] == 't':
-                continue
-            time.sleep(2.5)
-
             try:
-                infos['link'] = link
+                if post_details.split('is_video":')[1][:1] == 't':
+                    infos = self.__get_video_data(link, rank)
+                elif post_details.split('is_video":')[1][:1] == 'f':
+                    infos = self.__get_image_data(link, rank)
 
-                #Getting infos
-                infos['user'] = self.__get_user()
-                infos['subtitles'] = self.__get_subtitles()
-                infos['image_description'] = self.__get_image_description()
-                infos['likes'] = self.__get_likes()
-                infos['date'] = self.__get_date()
             except:
-                logger.warning("Failed to retrieve " + link + ' data.')
+                logger.warning("Failed to retrieve " + link + ' data. Skipping.')
+                time.sleep(3)
+                continue
 
-            if infos not in processed_data:
+            if infos not in processed_data and infos is not None:
                 processed_data.append(infos)
-            time.sleep(0.5)
+            time.sleep(1)
 
         return processed_data
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--login', default='scrapingweb', required=False,
+                                    help="Instagram login")
+
+    parser.add_argument('-p', '--password', default='wsabev3', required=False,
+                                    help="Instagram password")
+
+    parser.add_argument('-s', '--search', default='test', required=True,
+                                    help="Hashtag to be searched")
+
+    parser.add_argument('-n', '--n_scrolls', default=100, required=True,
+                                    help="Number of scrolls")
+
+    parser.add_argument('-o', '--output', default='test.csv', required=True,
+                                    help="Output filename")
+
+    args = parser.parse_args()
+
+
     my_bot = InstaBot(chromedriver_path = '../chromedriver_linux64/chromedriver',
-                 username = 'scrapingweb',
-                 password = 'wsabev3')
-    my_bot.search('ambev')
-    data = my_bot.get_data(nscrolls = 100, scroll_pause_time = 5)
+                 username = args.login,
+                 password = args.password)
+    my_bot.search(args.search)
+    data = my_bot.get_data(nscrolls = int(args.n_scrolls), scroll_pause_time = 5)
+
     logger.info(str(len(data)) + " links were found.")
 
     df = pd.DataFrame(data)
-    df.to_csv('insta_ambev_bo1.csv')
+    df.to_csv(args.output, index = False)
+    logger.info("Results saved at " + args.output)
 
 
 if __name__ == "__main__":
     main()
 
-#python -i bot.py
+'''
+Usage example:
+python instabot.py -s ambev -n 100 -o ambev-jan-31.csv
+'''
