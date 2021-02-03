@@ -281,11 +281,14 @@ class InstaBot():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-l', '--login', default='scrapingweb', required=False,
+    parser.add_argument('-l', '--login', required=True,
                                     help="Instagram login")
 
-    parser.add_argument('-p', '--password', default='wsabev3', required=False,
+    parser.add_argument('-p', '--password', required=True,
                                     help="Instagram password")
+
+    parser.add_argument('-c', '--chromedriver', required=True,
+                                    help="Chromedriver path")
 
     parser.add_argument('-s', '--search', default='test', required=True,
                                     help="Hashtag to be searched")
@@ -299,11 +302,12 @@ def main():
     args = parser.parse_args()
 
 
-    my_bot = InstaBot(chromedriver_path = '../chromedriver_linux64/chromedriver',
+    my_bot = InstaBot(chromedriver_path = args.chromedriver,
                  username = args.login,
                  password = args.password)
     my_bot.search(args.search)
-    data = my_bot.get_data(nscrolls = int(args.n_scrolls), scroll_pause_time = 5)
+    data = my_bot.get_data(nscrolls = int(args.n_scrolls),
+                                    scroll_pause_time = 5)
 
     logger.info(str(len(data)) + " links were found.")
 
@@ -314,8 +318,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-'''
-Usage example:
-python instabot.py -s ambev -n 100 -o ambev-jan-31.csv
-'''
