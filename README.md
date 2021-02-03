@@ -36,7 +36,7 @@ Example:
 
 The application is going to open a webpage and start to scrap the data. First, the login and the search will be done, after that, the bot will scroll the screen *n times* to save the posts links and then access one by one to get the data.
 
-![Object detection demo](./git_media/kangaroo-demo.gif)
+![Object detection demo](./git_media/instabot.gif)
 <br>
 
 When finished, the application is going to save a .csv file containing the following data for each post:
